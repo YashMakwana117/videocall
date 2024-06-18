@@ -1,0 +1,186 @@
+﻿@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Index</h2>
+
+<div>
+    <select id="userSelect" name="Users">
+        <option value="">Select User</option>
+        @foreach (var item in ViewBag.user)
+        {
+            <option value="@item.Name">@item.Name</option>
+        }
+    </select>
+</div>
+
+<div>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+
+    <button id="startCall">Start Call</button>
+    <button id="endCall">End Call</button>
+</div>
+
+<!-- Modal for incoming call -->
+<div id="incomingCallModal" style="display:none;">
+    <p>Incoming call from <span id="callerName"></span></p>
+    <button id="acceptCall">Accept</button>
+    <button id="rejectCall">Reject</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/signalr.js/2.4.1/jquery.signalR.min.js"></script>
+<script src="/signalr/hubs"></script>
+
+<script>
+    var localVideo = document.getElementById('localVideo');
+    var remoteVideo = document.getElementById('remoteVideo');
+    var startCallButton = document.getElementById('startCall');
+    var endCallButton = document.getElementById('endCall');
+    var userSelect = document.getElementById('userSelect');
+    var incomingCallModal = document.getElementById('incomingCallModal');
+    var acceptCallButton = document.getElementById('acceptCall');
+    var rejectCallButton = document.getElementById('rejectCall');
+    var callerNameSpan = document.getElementById('callerName');
+
+    var localStream;
+    var peerConnection;
+    var signalingHub = $.connection.videoCallHub;
+    var selectedUser;
+    var caller;
+
+    startCallButton.onclick = startCall;
+    endCallButton.onclick = endCall;
+    acceptCallButton.onclick = acceptCall;
+    rejectCallButton.onclick = rejectCall;
+
+    var config = {
+        'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }]
+    };
+
+    signalingHub.client.receiveMessage = function (message) {
+        var signal = JSON.parse(message);
+
+        if (signal.type === 'offer') {
+            caller = signal.fromUser;
+            callerNameSpan.innerText = signal.fromUser;
+            incomingCallModal.style.display = 'block';
+        } else if (signal.type === 'answer') {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+                .catch(handleError);
+        } else if (signal.candidate) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate))
+                .catch(handleError);
+        } else if (signal.type === 'reject') {
+            alert("User rejected the call.");
+            endCall();
+        } else if (signal.type === 'end') {
+            alert("Call ended by the other user.");
+            endCall();
+        }
+    };
+
+    function startCall() {
+        selectedUser = userSelect.value;
+        if (!selectedUser) {
+            alert("Please select a user to call.");
+            return;
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(function (stream) {
+                localVideo.srcObject = stream;
+                localStream = stream;
+
+                peerConnection = new RTCPeerConnection(config);
+                peerConnection.onicecandidate = handleIceCandidate;
+                peerConnection.ontrack = handleRemoteStream;
+
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                peerConnection.createOffer()
+                    .then(function (description) {
+                        return peerConnection.setLocalDescription(description);
+                    })
+                    .then(function () {
+                        signalingHub.server.send(JSON.stringify({
+                            'type': 'offer',
+                            'sdp': peerConnection.localDescription,
+                            'toUser': selectedUser,
+                            'fromUser': '@Session["Name"]'
+                        }));
+                    })
+                    .catch(handleError);
+            })
+            .catch(handleError);
+    }
+
+    function endCall() {
+        if (peerConnection) {
+            peerConnection.close();
+        }
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+        signalingHub.server.send(JSON.stringify({ 'type': 'end', 'toUser': selectedUser }));
+    }
+
+    function acceptCall() {
+        incomingCallModal.style.display = 'none';
+
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(function (stream) {
+                localVideo.srcObject = stream;
+                localStream = stream;
+
+                peerConnection = new RTCPeerConnection(config);
+                peerConnection.onicecandidate = handleIceCandidate;
+                peerConnection.ontrack = handleRemoteStream;
+
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                peerConnection.setRemoteDescription(new RTCSessionDescription(caller.sdp))
+                    .then(function () {
+                        return peerConnection.createAnswer();
+                    })
+                    .then(function (description) {
+                        return peerConnection.setLocalDescription(description);
+                    })
+                    .then(function () {
+                        signalingHub.server.send(JSON.stringify({
+                            'type': 'answer',
+                            'sdp': peerConnection.localDescription,
+                            'toUser': caller,
+                            'fromUser': '@Session["Name"]'
+                        }));
+                    })
+                    .catch(handleError);
+            })
+            .catch(handleError);
+    }
+
+    function rejectCall() {
+        incomingCallModal.style.display = 'none';
+        signalingHub.server.send(JSON.stringify({ 'type': 'reject', 'toUser': caller }));
+    }
+
+    function handleIceCandidate(event) {
+        if (event.candidate) {
+            signalingHub.server.send(JSON.stringify({ 'candidate': event.candidate, 'toUser': selectedUser }));
+        }
+    }
+
+    function handleRemoteStream(event) {
+        remoteVideo.srcObject = event.streams[0];
+    }
+
+    function handleError(error) {
+        console.error(error);
+    }
+
+    $.connection.hub.start().done(function () {
+        console.log('SignalR hub started');
+        signalingHub.server.register('@Session["Name"]');
+    });
+
+</script>

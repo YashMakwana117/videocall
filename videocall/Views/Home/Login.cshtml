@@ -1,0 +1,75 @@
+﻿@model videocall.Models.User
+@{
+    ViewBag.Title = "Login";
+}
+
+<style>
+    form {
+        max-width: 300px;
+        margin: 0 auto;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        background-color: #f9f9f9;
+        margin-top: 100px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-sizing: border-box;
+        font-size: 16px;
+    }
+
+    input[type="submit"].btn-primary {
+        width: 100%;
+        padding: 10px;
+        background-color: #007bff;
+        border: none;
+        border-radius: 5px;
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+        input[type="submit"].btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+    h2 {
+        display: flex;
+        justify-content: center;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    div {
+        margin-bottom: 15px;
+        width: 100%;
+        display: block;
+        justify-content: center;
+        align-items: center;
+    }
+</style>
+
+<div>
+    <form action="@Url.Action("Login","Home")" method="post">
+        <h2>Login</h2>
+        <div>
+            @if (!string.IsNullOrEmpty(ViewBag.msg))
+            {
+                <div class="alert alert-danger">@ViewBag.msg</div>
+            }
+            <div>
+                <input type="text" name="Name" placeholder="Enter Name" />
+                <input type="password" name="Password" placeholder="Enter Password" />
+                <input type="submit" name="submit" class="btn btn-primary" />
+            </div>
+        </div>
+    </form>
+</div>
